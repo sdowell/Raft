@@ -1,0 +1,4 @@
+kiosk 5000
+kiosk 5001
+tickets 100
+delay 5

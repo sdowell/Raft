@@ -18,6 +18,10 @@ ticket_lock = threading.RLock()
 cfg = None
 tickets = None
 delay = None
+currentTerm = None
+votedFor = None
+myLog = None
+currentLeader = None
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 	
 	def handle(self):
@@ -56,6 +60,9 @@ def update_tickets(val):
 		tickets = val
 		print("Updated ticket pool: %d" % tickets)
 
+def resetElectionTimeout():
+	return
+	
 def sync_lclock(clock_val = None):
 	global lclock
 	with lclock_lock:
@@ -73,8 +80,25 @@ def handle_message(our_message, our_socket):
 		# if configuration change
 		
 	# if requestvote
+	if type(our_message) is message.RequestVote:
+		vote_message = our_message
+		if vote_message.term < currentTerm:
+			#reply no
+			return message.RequestVoteResponse(False, currentTerm)
+		if vote_message.term > currentTerm:
+			currentTerm = vote_message.term
+		if vote_message.term >= currentTerm 
+			and (votedFor == None or votedFor == vote_message.cand_id)
+			and vote_message.log_term >= myLog.getTerm()
+			and vote_message.log_index >= myLog.getIndex():
+			votedFor = vote_message.cand_id
+			resetElectionTimeout()
+			return message.RequestVoteResponse(True, currentTerm)
+			
 	
 	# if appendentries
+	
+	
 	if type(our_message) is message.RequestMessage:
 		our_request_message = our_message
 		sync_lclock(our_message.lamport_clock)

@@ -67,6 +67,14 @@ def sync_lclock(clock_val = None):
 
 def handle_message(our_message, our_socket):
 	global tickets
+	# if client message
+		# if buy request
+		
+		# if configuration change
+		
+	# if requestvote
+	
+	# if appendentries
 	if type(our_message) is message.RequestMessage:
 		our_request_message = our_message
 		sync_lclock(our_message.lamport_clock)

@@ -9,13 +9,44 @@ def requestTickets(kiosk, tickets):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	print("Attempting to connect to port: " + str(kiosk))
 	s.connect((str(kiosk[0]), int(kiosk[1])))
-	buy_message = message.BuyMessage(tickets)
+	buy_message = message.ClientBuyRequest(tickets)
 	s.send(buy_message.data)
-	response = s.recv(16)
-	time.sleep(delay)
+	response = s.recv(4096)
+	#time.sleep(delay)
 	success = message.Message.deserialize(response)
 	s.close()
 	return success
+
+def buyTickets(cfg, myKiosk):
+	#ask user for number of tickets
+	buytickets = input("How many tickets would you like to purchase? ")
+	try:
+		buytickets = int(buytickets)
+	except ValueError:
+		print("Invalid input")
+		return
+	#request to purchase tickets from selected kiosk
+	response = requestTickets(cfg.kiosks[myKiosk], buytickets)
+	if response.success == True:
+		print("Tickets purchased successfully")
+	elif response.success == False:
+		print("Tickets not purchased")
+	else:
+		print("Error: unrecognized response")	
+
+def showLog(cfg, myKiosk):
+	kiosk = cfg.kiosks[myKiosk]
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	print("Attempting to connect to port: " + str(kiosk))
+	s.connect((str(kiosk[0]), int(kiosk[1])))
+	log_message = message.ClientLogRequest()
+	s.send(log_message.data)
+	response = s.recv(4096)
+	#time.sleep(delay)
+	r_obj = message.Message.deserialize(response)
+	s.close()
+	r_obj.log.printLog()
+	return r_obj.log
 
 def cmdUI(cfg):
 	done = False
@@ -44,21 +75,27 @@ def cmdUI(cfg):
 			done = True
 			break
 		myKiosk = a_input
-		#ask user for number of tickets
-		buytickets = input("How many tickets would you like to purchase? ")
+		print("1. Buy Tickets")
+		print("2. Show Log")
 		try:
-			buytickets = int(buytickets)
+			a_input = input("Please choose to either buy tickets or view the log: ")
+		except NameError:
+			print("Invalid input: expected int")
+			continue		
+		try:
+			a_input = int(a_input)
 		except ValueError:
 			print("Invalid input")
 			continue
-		#request to purchase tickets from selected kiosk
-		response = requestTickets(cfg.kiosks[myKiosk], buytickets)
-		if response.success == message.BUY_SUCCESS:
-			print("Tickets purchased successfully")
-		elif response.success == message.BUY_FAIL:
-			print("Tickets not purchased")
+		if a_input == 1:
+			buyTickets(cfg, myKiosk)
+			continue
+		elif a_input == 2:
+			showLog(cfg, myKiosk)
+			continue
 		else:
-			print("Error: unrecognized response")
+			print("Unexpected input")
+			continue
 		
 
 def main():

@@ -45,6 +45,21 @@ class ClientBuyResponse(Message):
 		self.leader = leader
 		super(ClientBuyResponse, self).__init__(self.serialize())
 
+class ClientLogRequest(Message):
+	def serialize(self):
+		return pickle.dumps(self)
+
+	def __init__(self):
+		super(ClientLogRequest, self).__init__(self.serialize())
+		
+class ClientLogResponse(Message):
+	def serialize(self):
+		return pickle.dumps(self)
+
+	def __init__(self, log):
+		self.log = log
+		super(ClientLogResponse, self).__init__(self.serialize())
+				
 class ClientConfigRequest(Message):
 	def serialize(self):
 		return pickle.dumps(self)
@@ -81,7 +96,7 @@ class AppendEntries(Message):
 
 	def __init__(self, term, leader_id, prevLogIndex, prevLogTerm, entries, commitIndex):
 		self.term = term
-		self.leader_id
+		self.leader_id = leader_id
 		self.prevLogIndex = prevLogIndex
 		self.prevLogTerm = prevLogTerm
 		self.entries = entries
@@ -92,8 +107,6 @@ class AppendEntriesResponse(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, num_tickets, success, leader=None):
-		self.num_tickets = num_tickets
+	def __init__(self, success):
 		self.success = success
-		self.leader = leader
 		super(AppendEntriesResponse, self).__init__(self.serialize())

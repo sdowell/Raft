@@ -64,11 +64,17 @@ class ClientConfigRequest(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, num_tickets, success, leader=None):
-		self.num_tickets = num_tickets
-		self.success = success
-		self.leader = leader
+	def __init__(self, new_config):
+		self.new_config = new_config
 		super(ClientConfigRequest, self).__init__(self.serialize())
+		
+class ClientConfigResponse(Message):
+	def serialize(self):
+		return pickle.dumps(self)
+
+	def __init__(self, success):
+		self.success = success
+		super(ClientConfigResponse, self).__init__(self.serialize())
 		
 class RequestVote(Message):
 	def serialize(self):

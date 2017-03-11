@@ -27,7 +27,8 @@ class Config:
 	def to_file(filename):
 		pass
 
-	def __init__(self, kiosks, delay, tickets = None):
+	def __init__(self, kiosks, delay, tickets = None, old_kiosks = None):
+		self.old_kiosks = old_kiosks
 		self.kiosks = kiosks
 		self.delay = delay
 		self.tickets = tickets

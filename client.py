@@ -34,6 +34,11 @@ def buyTickets(cfg, myKiosk):
 	else:
 		print("Error: unrecognized response")	
 
+def changeConfig(oldcfg, newcfg, kiosk):
+	
+	
+	return
+		
 def showLog(cfg, myKiosk):
 	kiosk = cfg.kiosks[myKiosk]
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

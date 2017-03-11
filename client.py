@@ -2,7 +2,7 @@ import socket
 import config
 import message
 import time
-
+import sys
 delay = None
 
 def requestTickets(kiosk, tickets):
@@ -34,10 +34,7 @@ def buyTickets(cfg, myKiosk):
 	else:
 		print("Error: unrecognized response")	
 
-def changeConfig(oldcfg, newcfg, kiosk):
-	
-	
-	return
+
 		
 def showLog(cfg, myKiosk):
 	kiosk = cfg.kiosks[myKiosk]
@@ -53,6 +50,33 @@ def showLog(cfg, myKiosk):
 	r_obj.log.printLog()
 	return r_obj.log
 
+def changeConfig(cfg, myKiosk):
+	fname = input("Enter the name of the configuration file ")
+	try:
+		fname = str(fname)
+	except ValueError:
+		print("Invalid input")
+		return
+	#request to purchase tickets from selected kiosk
+	kiosk = cfg.kiosks[myKiosk]
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	print("Attempting to connect to port: " + str(kiosk))
+	s.connect((str(kiosk[0]), int(kiosk[1])))
+	new_config = config.Config.from_file(fname)
+	cfg_message = message.ClientConfigRequest(new_config)
+	s.send(cfg_message.data)
+	response = s.recv(4096)
+	#time.sleep(delay)
+	r_obj = message.Message.deserialize(response)
+	s.close()
+	if r_obj.success == True:
+		print("Config changed successfully")
+	elif r_obj.success == False:
+		print("Config not changed successfully")
+	else:
+		print("Error: unrecognized response")
+	return new_config
+	
 def cmdUI(cfg):
 	done = False
 	while not done:
@@ -82,6 +106,7 @@ def cmdUI(cfg):
 		myKiosk = a_input
 		print("1. Buy Tickets")
 		print("2. Show Log")
+		print("3. Change Configuration")
 		try:
 			a_input = input("Please choose to either buy tickets or view the log: ")
 		except NameError:
@@ -98,6 +123,9 @@ def cmdUI(cfg):
 		elif a_input == 2:
 			showLog(cfg, myKiosk)
 			continue
+		elif a_input == 3:
+			cfg = changeConfig(cfg, myKiosk)
+			continue
 		else:
 			print("Unexpected input")
 			continue
@@ -105,7 +133,8 @@ def cmdUI(cfg):
 
 def main():
 	print("Starting client...")
-	cfg = config.Config.from_file("config.txt")
+	cfgfile = sys.argv[1]
+	cfg = config.Config.from_file(cfgfile)
 	global delay
 	delay = cfg.delay
 	cmdUI(cfg)

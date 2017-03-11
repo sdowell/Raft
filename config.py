@@ -1,3 +1,16 @@
+class Kiosk:
+	def __init__(self, id, hostname, port):
+		self.id = id
+		self.hostname = hostname
+		self.port = port
+		
+	def getAddress(self):
+		return (self.hostname, self.port)
+		
+	def getId(self):
+		return self.id
+
+
 class Config:
 
 	@staticmethod 
@@ -27,8 +40,40 @@ class Config:
 	def to_file(filename):
 		pass
 
-	def __init__(self, kiosks, delay, tickets = None, old_kiosks = None):
+	def toString(self):
+		if self.old_kiosks is None:
+			return "Cnew"
+		else:
+			return "Cold+Cnew"
+		
+	# param voters: list of address tuples for voters
+	def hasQuorum(self, voters):
+		if self.old_kiosks is not None:
+			#old_ids = [x.getId() for x in self.old_kiosks]
+			old_votes = 0
+			for v in voters:
+				if v in self.old_kiosks:
+					old_votes = old_votes + 1
+			if old_votes < len(self.old_kiosks)/2:
+				return False
+		new_votes = 0
+		for v in voters:
+			if v in self.new_kiosks:
+				new_votes = new_votes + 1
+		if new_votes < len(self.new_kiosks)/2:
+			return False
+		else:
+			return True
+	
+	def __init__(self, new_kiosks, delay, tickets = None, old_kiosks = None):
 		self.old_kiosks = old_kiosks
-		self.kiosks = kiosks
+		self.new_kiosks = new_kiosks
+		self.kiosks = []
+		if self.old_kiosks is not None:
+			for ok in self.old_kiosks:
+				self.kiosks.append(ok)
+		for nk in self.new_kiosks:
+			if nk not in self.kiosks:
+				self.kiosks.append(nk)
 		self.delay = delay
 		self.tickets = tickets

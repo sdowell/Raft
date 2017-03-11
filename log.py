@@ -1,5 +1,5 @@
 import message
-
+import config
 
 class LogEntry:
 
@@ -11,10 +11,11 @@ class LogEntry:
 
 class Log:
 
-	def __init__(self, numtickets):
+	def __init__(self, numtickets, cfg=None):
 		self.entries = []
 		self.commitIndex = -1
 		self.num_tickets = numtickets
+		self.config = cfg
 		return
 		
 	def printLog(self):
@@ -22,11 +23,15 @@ class Log:
 		for index in range(len(self.entries)):
 			e = self.entries[index]
 			if index <= self.commitIndex:
-				print("Index: " + str(e.index) + " term: " + str(e.term) + " committed: True")
+				print("Index: " + str(e.index) + " term: " + str(e.term) + " command: " + e.command.toString() + " committed: True")
 			else:
-				print("Index: " + str(e.index) + " term: " + str(e.term) + " committed: False")
+				print("Index: " + str(e.index) + " term: " + str(e.term) + " command: " + e.command.toString() + " committed: False")
 		print("------------------------------")
 		print("Remaining tickets: " + str(self.getTickets()))
+		
+	def getConfig(self):
+		return self.config
+		
 	def getTickets(self):
 		return self.num_tickets
 	# delete all entries after index
@@ -67,6 +72,12 @@ class Log:
 				return True
 			else:
 				return False
+		elif type(entry.command) is config.Config:
+			print("Changing config")
+			self.config = entry.command
+			return True
+		else:
+			print("Unexpected command")
 	def setCommit(self, c):
 		initial = self.commitIndex
 		final = c

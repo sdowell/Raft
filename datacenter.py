@@ -34,6 +34,7 @@ myState = STATE_FOLLOWER
 my_id = None
 timeout_interval = None
 follower_timer = None
+server_addr = None
 
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 	
@@ -111,27 +112,30 @@ def setLeader():
 		myState = STATE_LEADER
 	else:
 		print("reached leader state from unexpected state")
-	for x in range(0, len(cfg.kiosks)):
+	for x in range(0, len(myLog.getConfig().kiosks)):
 		if x is not my_id:
-			t = threading.Thread(target=sendHeartbeat, args = (x,))
+			t = threading.Thread(target=sendHeartbeat, args = (myLog.getConfig().kiosks[x],))
 			t.start()
 	return
 	
 def sendHeartbeat(kiosk):
 	global myState
 	global myLog
+	global currentTerm
 	while(myState == STATE_LEADER):
 		#append_lock[kiosk].acquire()
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		try:
 			done = False
-			s.connect(cfg.kiosks[kiosk])
+			s.connect(kiosk)
 			prevIndex = myLog.getIndex() - 1
 			prevTerm = myLog.getTerm(prevIndex)
 			#print("AppendEntries: term=" + str(currentTerm) + " my_id=" + str(my_id) + " prevIndex=" + str(prevIndex) + " prevTerm=" + str(prevTerm) + " commit=" + str(myLog.getCommit()))
 			send_message(s, message.AppendEntries(currentTerm, my_id, prevIndex, prevTerm, None, myLog.getCommit()))
 			response = recieve_message(s)
 			assert response is None or type(response) is message.AppendEntriesResponse
+			if response.term > currentTerm:
+				currentTerm = response.term			
 			if response.success:
 				done = True
 			index = myLog.getIndex() - 1
@@ -143,6 +147,8 @@ def sendHeartbeat(kiosk):
 				send_message(s, message.AppendEntries(currentTerm, my_id, prevIndex, prevTerm, entry, myLog.getCommit()))
 				response = recieve_message(s)
 				assert response is None or  type(response) is message.AppendEntriesResponse
+				if response.term > currentTerm:
+					currentTerm = response.term						
 				if response is None:
 					pass
 				elif response.success:
@@ -187,13 +193,16 @@ def holdElection():
 		setTerm(currentTerm + 1)
 		votedFor = my_id
 		readers, writers, errors = [],[],[]
-		our_sockets = [None]*message.TOTAL_KIOSKS
-		for x in range(0, len(cfg.kiosks)):
+		currentConfig = myLog.getConfig()
+		our_sockets = [None]*len(currentConfig.kiosks)
+		sock_map = {}
+		for x in range(0, len(currentConfig.kiosks)):
 			if x is not my_id:
 				try:
 					our_sockets[x] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-					our_sockets[x].connect(cfg.kiosks[x])
+					our_sockets[x].connect(currentConfig.kiosks[x])
 					our_sockets[x].setblocking(0)
+					sock_map[our_sockets[x]] = currentConfig.kiosks[x]
 					writers.append(our_sockets[x])
 					readers.append(our_sockets[x])
 				except:
@@ -204,7 +213,8 @@ def holdElection():
 	#			send_message(writer, message.RequestVote(my_id, currentTerm, myLog.getIndex(), myLog.getTerm()))
 	#			writers.remove(writer)
 		denied = False
-		numVotes = 1
+		#numVotes = 1
+		voters = [server_addr]
 		start = time.time()
 		mytimeout = random.uniform(3.0,5.0)
 		while (time.time() - start) < mytimeout:
@@ -227,10 +237,11 @@ def holdElection():
 					denied = True
 					break
 				elif message_in.voteGranted == True:
-					numVotes = numVotes + 1
-				if numVotes > len(cfg.kiosks)/2:
+					#numVotes = numVotes + 1
+					voters.append(sock_map[reader])
+				if currentConfig.hasQuorum(voters):#numVotes > len(currentConfig.kiosks)/2:
 					break
-			if numVotes >= len(cfg.kiosks)/2:
+			if currentConfig.hasQuorum(voters):#numVotes >= len(currentConfig.kiosks)/2:
 				if(debug):
 					print("I was elected leader with " + str(len(cfg.kiosks)/2) + "votes")
 				setLeader()
@@ -256,6 +267,62 @@ def sync_lclock(clock_val = None):
 			lclock = lclock + 1
 		print("Updated lamport_clock, new value: %d" % lclock)
 
+		
+def broadcastAppend(event, myConfig):
+	global currentTerm
+	global myLog
+	if myState != STATE_LEADER:
+		#append_lock.release()
+		return False
+	newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), event)
+	myLog.appendEntry(newLogEntry)
+	numKiosks = len(myConfig.kiosks)
+	our_sockets = [None]*numKiosks
+	readers, writers, errors = [],[],[]
+	sock_map = {}
+	for x in range(0, numKiosks):
+		if x is not my_id:
+			try:
+				our_sockets[x] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				our_sockets[x].connect(myConfig.kiosks[x])
+				our_sockets[x].setblocking(0)
+				sock_map[our_sockets[x]] = x
+				writers.append(our_sockets[x])
+				readers.append(our_sockets[x])
+			except:
+				pass
+	entry_index = [newLogEntry.index]*len(our_sockets)
+	voters = [server_addr]
+	while len(writers) != 0 or len(readers) != 0:
+		preaders , pwriters , _ = select.select(readers, writers, errors)
+		for writer in pwriters:
+			w_id = sock_map[writer]
+			index = entry_index[w_id]
+			prevIndex = index - 1
+			prevTerm = myLog.getTerm(prevIndex)
+			entry = myLog.getEntry(index)
+			send_message(writer, message.AppendEntries(currentTerm, my_id, prevIndex, prevTerm, entry, myLog.getCommit()))
+			#print("AppendEntries: term=" + str(currentTerm) + " my_id=" + str(my_id) + " prevIndex=" + str(prevIndex) + " prevTerm=" + str(prevTerm) + " entry=" + str(entry.command.num_tickets) + " commit=" + str(myLog.getCommit()))
+			writers.remove(writer)
+
+		for reader in preaders:
+			message_in = recieve_message(reader)
+			assert type(message_in) is message.AppendEntriesResponse
+			if message_in.term > currentTerm:
+				currentTerm = message_in.term
+			if message_in.success:
+				readers.remove(reader)
+				voters.append(myConfig.kiosks[sock_map[reader]])
+			else:
+				entry_index[sock_map[reader]] = entry_index[sock_map[reader]] - 1
+				writers.append(reader)
+	if myConfig.hasQuorum(voters):
+		success = myLog.setCommit(newLogEntry.index)
+		return success
+	else:
+		return False
+		
+		
 def handle_message(our_message, our_socket):
 	global currentTerm
 	global tickets
@@ -263,11 +330,16 @@ def handle_message(our_message, our_socket):
 	global myState
 	# if client message
 		# if buy request
+		
 	if type(our_message) is message.ClientBuyRequest:
 		#append_lock.acquire()
 		if myState != STATE_LEADER:
 			#append_lock.release()
 			return message.ClientBuyResponse(tickets, False, currentLeader)
+			
+		success = broadcastAppend(our_message, myLog.getConfig())
+		return message.ClientBuyResponse(myLog.getTickets(), success)
+			
 		newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), our_message)
 		myLog.appendEntry(newLogEntry)
 		our_sockets = [None]*message.TOTAL_KIOSKS
@@ -318,6 +390,44 @@ def handle_message(our_message, our_socket):
 	# if configuration change
 	if type(our_message) is message.ClientConfigRequest:
 		# phase 1
+		config_message = our_message
+		cfg_new = config_message.new_config
+		cfg_old_new = config.Config(cfg_new.kiosks, cfg_new.delay, cfg.tickets, cfg.kiosks)
+		
+		success = broadcastAppend(cfg_old_new, cfg_old_new)
+		if not success:
+			print("Unsuccessful old/new config broadcast")
+		
+		new_followers = [x for x in cfg_old_new.new_kiosks if x not in cfg_old_new.old_kiosks]
+		for f in new_followers:
+			if f is not server_addr:
+				t = threading.Thread(target=sendHeartbeat, args = (f,))
+				t.start()
+			
+		# phase 2
+		success = broadcastAppend(cfg_new, cfg_new)
+		if not success:
+			print("Unsuccessful new config broadcast")
+			
+		return message.ClientConfigResponse(success)
+			
+		newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), cfg_old_new)
+		myLog.appendEntry(newLogEntry)
+		our_sockets = [None]*len(cfg_old_new.kiosks)
+		readers, writers, errors = [],[],[]
+		voters = []
+		for x in range(0, len(cfg_old_new.kiosks)):
+			if x is not my_id:
+				try:
+					our_sockets[x] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					our_sockets[x].connect(cfg.kiosks[x])
+					our_sockets[x].setblocking(0)
+					sock_map[our_sockets[x]] = x
+					writers.append(our_sockets[x])
+					readers.append(our_sockets[x])
+				except:
+					pass
+		
 		
 		
 		# phase 2
@@ -330,6 +440,8 @@ def handle_message(our_message, our_socket):
 	# if requestvote
 	if type(our_message) is message.RequestVote:
 		vote_message = our_message
+		if vote_message.cand_id >= len(myLog.getConfig().kiosks):
+			return message.RequestVoteResponse(False, currentTerm)
 		if vote_message.term < currentTerm:
 			#reply no
 			return message.RequestVoteResponse(False, currentTerm)
@@ -350,15 +462,17 @@ def handle_message(our_message, our_socket):
 	# if appendentries
 	if type(our_message) is message.AppendEntries:
 		append_message = our_message
-		print("AppendEntries: term=" + str(append_message.term) + " my_id=" + str(append_message.leader_id) + " prevIndex=" + str(append_message.prevLogIndex) + " prevTerm=" + str(append_message.prevLogTerm) + " commit=" + str(append_message.commitIndex))
+		if append_message.leader_id >= len(myLog.getConfig().kiosks):
+			return None
+		#print("AppendEntries: term=" + str(append_message.term) + " my_id=" + str(append_message.leader_id) + " prevIndex=" + str(append_message.prevLogIndex) + " prevTerm=" + str(append_message.prevLogTerm) + " commit=" + str(append_message.commitIndex))
 		resetElectionTimeout()
 		#if append_message.entries is None:
 		#	resetElectionTimeout()
 		#	return None
-		if append_message.term < currentTerm:
-			print("I am higher term than the current leader")
-			setCandidate()
-			return None
+		#if append_message.term < currentTerm:
+		#	print("I am higher term than the current leader")
+			#setCandidate()
+		#	return message.AppendEntriesResponse(True, currentTerm)
 		if append_message.term > currentTerm:
 			setTerm(append_message.term)
 		myState = STATE_FOLLOWER
@@ -375,7 +489,7 @@ def handle_message(our_message, our_socket):
 				#log_stack.append(nextEntry)
 			elif myLog.getIndex() <= prevIndex or myLog.getTerm(prevIndex) != prevTerm:
 				#log_stack.append(nextEntry)
-				send_message(our_socket, message.AppendEntriesResponse(False))
+				send_message(our_socket, message.AppendEntriesResponse(False, currentTerm))
 				append_message = recieve_message(our_socket)
 				assert type(append_message) is message.AppendEntries
 				continue
@@ -384,7 +498,7 @@ def handle_message(our_message, our_socket):
 				while len(log_stack) > 0:
 					myLog.appendEntry(log_stack.pop())
 				myLog.setCommit(append_message.commitIndex)
-				return message.AppendEntriesResponse(True)
+				return message.AppendEntriesResponse(True, currentTerm)
 			
 		resetElectionTimeout()
 		# compare entry with local log
@@ -463,13 +577,15 @@ def main():
 	global append_lock
 	my_id = get_kiosk_number()
 	follower_timer = threading.Timer(1,setCandidate)
+	config_file = sys.argv[2]
 	global cfg
-	cfg  = config.Config.from_file("config.txt")
+	cfg  = config.Config.from_file(config_file)
 	#append_lock = [threading.Lock()]*len(cfg.kiosks)
 	global tickets
 	tickets = cfg.tickets
 	global delay
-	myLog = log.Log(tickets)
+	global server_addr
+	myLog = log.Log(tickets, cfg)
 	delay = cfg.delay
 	message.TOTAL_KIOSKS = len(cfg.kiosks)
 	kiosk_number = get_kiosk_number()

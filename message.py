@@ -28,6 +28,9 @@ class Message:
 		
 class ClientBuyRequest(Message):
 
+	def toString(self):
+		return "Buy " + str(self.num_tickets)
+
 	def serialize(self):
 		return pickle.dumps(self)
 
@@ -113,6 +116,7 @@ class AppendEntriesResponse(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, success):
+	def __init__(self, success, term):
 		self.success = success
+		self.term = term
 		super(AppendEntriesResponse, self).__init__(self.serialize())

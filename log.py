@@ -41,6 +41,9 @@ class Log:
 		del self.entries[index:]
 		
 	def appendEntry(self, entry):
+		if type(entry.command) is config.Config:
+			print("Changing config")
+			self.config = entry.command
 		self.entries.append(entry)
 		return
 
@@ -61,7 +64,7 @@ class Log:
 			except IndexError:
 				print("My length: " + str(len(self.entries)) + " index=" + str(index))
 				return -1
-	def incrCommit(self):
+	def incrCommit(self, leader=False, currentTerm=None):
 		self.commitIndex = self.commitIndex + 1
 		entry = self.getEntry(self.commitIndex)
 		entry.committed = True
@@ -72,18 +75,21 @@ class Log:
 				return True
 			else:
 				return False
-		elif type(entry.command) is config.Config:
-			print("Changing config")
-			self.config = entry.command
+		elif type(entry.command) is config.Config and leader and entry.command.old_kiosks is not None:
+			print("Appending Cnew")
+			Cold_new = entry.command
+			Cnew = config.Config(Cold_new.new_kiosks, Cold_new.delay, self.num_tickets)
+			Cnew_log = LogEntry(currentTerm, self.getIndex(), Cnew)
+			self.appendEntry(Cnew_log)
 			return True
 		else:
 			print("Unexpected command")
-	def setCommit(self, c):
+	def setCommit(self, c, leader=False, currentTerm=None):
 		initial = self.commitIndex
 		final = c
 		val = False
 		for ind in range(initial, final):
-			val = self.incrCommit()
+			val = self.incrCommit(leader, currentTerm)
 		self.commitIndex = c
 		return val
 	# returns index of last committed entry

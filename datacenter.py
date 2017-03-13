@@ -276,6 +276,7 @@ def broadcastAppend(event, myConfig):
 		return False
 	newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), event)
 	myLog.appendEntry(newLogEntry)
+	myConfig = myLog.getConfig()
 	numKiosks = len(myConfig.kiosks)
 	our_sockets = [None]*numKiosks
 	readers, writers, errors = [],[],[]
@@ -317,7 +318,7 @@ def broadcastAppend(event, myConfig):
 				entry_index[sock_map[reader]] = entry_index[sock_map[reader]] - 1
 				writers.append(reader)
 	if myConfig.hasQuorum(voters):
-		success = myLog.setCommit(newLogEntry.index)
+		success = myLog.setCommit(newLogEntry.index, True)
 		return success
 	else:
 		return False
@@ -405,9 +406,9 @@ def handle_message(our_message, our_socket):
 				t.start()
 			
 		# phase 2
-		success = broadcastAppend(cfg_new, cfg_new)
-		if not success:
-			print("Unsuccessful new config broadcast")
+		#success = broadcastAppend(cfg_new, cfg_new)
+		#if not success:
+		#	print("Unsuccessful new config broadcast")
 			
 		return message.ClientConfigResponse(success)
 			

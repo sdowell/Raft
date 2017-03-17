@@ -83,11 +83,12 @@ class RequestVote(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, cand_id, term, log_index, log_term):
+	def __init__(self, cand_id, term, log_index, log_term, serverAddr=None):
 		self.cand_id = cand_id
 		self.term = term
 		self.log_index = log_index
 		self.log_term = log_term
+		self.serverAddr = serverAddr
 		super(RequestVote, self).__init__(self.serialize())
 		
 class RequestVoteResponse(Message):
@@ -103,13 +104,14 @@ class AppendEntries(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, term, leader_id, prevLogIndex, prevLogTerm, entries, commitIndex):
+	def __init__(self, term, leader_id, prevLogIndex, prevLogTerm, entries, commitIndex, serverAddr=None):
 		self.term = term
 		self.leader_id = leader_id
 		self.prevLogIndex = prevLogIndex
 		self.prevLogTerm = prevLogTerm
 		self.entries = entries
 		self.commitIndex = commitIndex
+		self.serverAddr = serverAddr
 		super(AppendEntries, self).__init__(self.serialize())
 		
 class AppendEntriesResponse(Message):

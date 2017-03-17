@@ -51,7 +51,7 @@ def showLog(cfg, myKiosk):
 	return r_obj.log
 
 def changeConfig(cfg, myKiosk):
-	fname = input("Enter the name of the configuration file ")
+	fname = input("Enter the name of the configuration file: ")
 	try:
 		fname = str(fname)
 	except ValueError:
@@ -65,16 +65,16 @@ def changeConfig(cfg, myKiosk):
 	new_config = config.Config.from_file(fname)
 	cfg_message = message.ClientConfigRequest(new_config)
 	s.send(cfg_message.data)
-	response = s.recv(4096)
+	#response = s.recv(4096)
 	#time.sleep(delay)
-	r_obj = message.Message.deserialize(response)
+	#r_obj = message.Message.deserialize(response)
 	s.close()
-	if r_obj.success == True:
-		print("Config changed successfully")
-	elif r_obj.success == False:
-		print("Config not changed successfully")
-	else:
-		print("Error: unrecognized response")
+	#if r_obj.success == True:
+	#	print("Config changed successfully")
+	#elif r_obj.success == False:
+	#	print("Config not changed successfully")
+	#else:
+	#	print("Error: unrecognized response")
 	return new_config
 	
 def cmdUI(cfg):

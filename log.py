@@ -1,6 +1,9 @@
 import message
 import config
+import threading
 
+
+#log_lock = threading.Lock()
 class LogEntry:
 
 	def __init__(self, term, index, command, commit=False):
@@ -16,6 +19,7 @@ class Log:
 		self.commitIndex = -1
 		self.num_tickets = numtickets
 		self.config = cfg
+		self.followerIndices = {}
 		return
 		
 	def printLog(self):
@@ -29,6 +33,27 @@ class Log:
 		print("------------------------------")
 		print("Remaining tickets: " + str(self.getTickets()))
 		
+	def clearFollowerIndices(self):
+		self.followerIndices = {}
+		return
+		
+	def setFollowerIndex(self, f, i):
+		self.followerIndices[f] = i
+		return
+		
+	def checkFollowerIndices(self, myAddr, leader=False, currentTerm=None):
+		#log_lock.acquire()
+		if self.commitIndex >= self.getIndex()-1:
+			#log_lock.release()
+			return
+		voters = [myAddr]
+		for f in self.followerIndices:
+			if self.followerIndices[f] > self.commitIndex:
+				voters.append(f)
+		if self.getConfig().hasQuorum(voters):
+			self.incrCommit(leader, currentTerm)
+		#log_lock.release()
+		
 	def getConfig(self):
 		return self.config
 		
@@ -41,10 +66,13 @@ class Log:
 		del self.entries[index:]
 		
 	def appendEntry(self, entry):
+		#log_lock.acquire()
 		if type(entry.command) is config.Config:
 			print("Changing config")
 			self.config = entry.command
+			print(str(self.config.kiosks))
 		self.entries.append(entry)
+		#log_lock.release()
 		return
 
 	def getEntry(self, index):
@@ -83,14 +111,20 @@ class Log:
 			self.appendEntry(Cnew_log)
 			return True
 		else:
-			print("Unexpected command")
+			pass
+			#print("Unexpected command")
 	def setCommit(self, c, leader=False, currentTerm=None):
+		#log_lock.acquire()
 		initial = self.commitIndex
 		final = c
 		val = False
+		if initial >= final:
+			#log_lock.release()
+			return True
 		for ind in range(initial, final):
 			val = self.incrCommit(leader, currentTerm)
 		self.commitIndex = c
+		#log_lock.release()
 		return val
 	# returns index of last committed entry
 	def getCommit(self):

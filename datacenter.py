@@ -120,7 +120,7 @@ def setFollower():
 	resetElectionTimeout()
 	#resetElectionTimeout()
 	if(debug):
-		print("Entering follower mode")
+		#print("Entering follower mode")
 		pass
 	#state_lock.release()
 	return
@@ -256,7 +256,7 @@ def holdElection():
 		sock_map = {}
 		for x in range(0, len(currentConfig.kiosks)):
 			if currentConfig.kiosks[x] != server_addr:
-				print("My address: " + str(server_addr) + ", requesting " + str(currentConfig.kiosks[x]) + " for vote")
+				#print("My address: " + str(server_addr) + ", requesting " + str(currentConfig.kiosks[x]) + " for vote")
 				try:
 					our_sockets[x] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 					our_sockets[x].connect(currentConfig.kiosks[x])
@@ -313,7 +313,8 @@ def holdElection():
 				#	break
 			if currentConfig.hasQuorum(voters):#numVotes >= len(currentConfig.kiosks)/2:
 				if(debug):
-					print("I was elected leader with " + str(len(cfg.kiosks)/2) + "votes")
+					#print("I was elected leader with " + str(len(cfg.kiosks)/2) + "votes")
+					pass
 				for s in our_sockets:
 					if s is not None:
 						try:
@@ -411,6 +412,7 @@ def handle_message(our_message, our_socket):
 	global tickets
 	global votedFor
 	global myState
+	global currentLeader
 	# if client message
 		# if buy request
 		
@@ -422,7 +424,13 @@ def handle_message(our_message, our_socket):
 			print("I am not the current leader")
 			return message.ClientBuyResponse(tickets, False, currentLeader)
 			
-		#success = broadcastAppend(our_message, myLog.getConfig())
+		t = myLog.getTickets()
+		bt = our_message.num_tickets
+		success = broadcastAppend(our_message, myLog.getConfig())
+		if bt > t:
+			return message.ClientBuyResponse(myLog.getTickets(), False, quorum=success)
+		else:
+			return message.ClientBuyResponse(myLog.getTickets(), True, quorum=success)
 		newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), our_message)
 		myLog.appendEntry(newLogEntry)
 		time.sleep(0.5)
@@ -573,6 +581,7 @@ def handle_message(our_message, our_socket):
 		if append_message.term > currentTerm:
 			setTerm(append_message.term)
 		setFollower()
+		currentLeader = append_message.serverAddr
 		log_stack = []
 		while True:
 			prevIndex = append_message.prevLogIndex

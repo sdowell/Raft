@@ -8,7 +8,11 @@ delay = None
 def requestTickets(kiosk, tickets):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	print("Attempting to connect to port: " + str(kiosk))
-	s.connect((str(kiosk[0]), int(kiosk[1])))
+	try:
+		s.connect((str(kiosk[0]), int(kiosk[1])))
+	except ConnectionRefusedError:
+		print("Could not connect to host")
+		return None
 	buy_message = message.ClientBuyRequest(tickets)
 	s.send(buy_message.data)
 	response = s.recv(4096)
@@ -27,12 +31,18 @@ def buyTickets(cfg, myKiosk):
 		return
 	#request to purchase tickets from selected kiosk
 	response = requestTickets(cfg.kiosks[myKiosk], buytickets)
-	if response.success == True:
+	if response is None:
+		return
+	if response.leader is not None:
+		print("Kiosk " + str(cfg.kiosks[myKiosk]) + " is not the current leader. The current leader is " + str(response.leader))
+	elif response.success == True and response.quorum == True:
 		print("Tickets purchased successfully")
+	elif response.success == True and response.quorum == False:
+		print("Tickets not yet purchased: leader could not get quorum")
 	elif response.success == False:
-		print("Tickets not purchased")
+		print("Tickets not purchased: not enough tickets to complete sale")
 	else:
-		print("Error: unrecognized response")	
+		print("Error: unrecognized response")
 
 
 		
@@ -40,7 +50,11 @@ def showLog(cfg, myKiosk):
 	kiosk = cfg.kiosks[myKiosk]
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	print("Attempting to connect to port: " + str(kiosk))
-	s.connect((str(kiosk[0]), int(kiosk[1])))
+	try:
+		s.connect((str(kiosk[0]), int(kiosk[1])))
+	except ConnectionRefusedError:
+		print("Could not connect to host")
+		return None
 	log_message = message.ClientLogRequest()
 	s.send(log_message.data)
 	response = s.recv(4096)
@@ -61,7 +75,11 @@ def changeConfig(cfg, myKiosk):
 	kiosk = cfg.kiosks[myKiosk]
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	print("Attempting to connect to port: " + str(kiosk))
-	s.connect((str(kiosk[0]), int(kiosk[1])))
+	try:
+		s.connect((str(kiosk[0]), int(kiosk[1])))
+	except ConnectionRefusedError:
+		print("Could not connect to host")
+		return None
 	new_config = config.Config.from_file(fname)
 	cfg_message = message.ClientConfigRequest(new_config)
 	s.send(cfg_message.data)

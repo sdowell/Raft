@@ -42,10 +42,11 @@ class ClientBuyResponse(Message):
 	def serialize(self):
 		return pickle.dumps(self)
 
-	def __init__(self, num_tickets, success, leader=None):
+	def __init__(self, num_tickets, success, leader=None, quorum=None):
 		self.num_tickets = num_tickets
 		self.success = success
 		self.leader = leader
+		self.quorum = quorum
 		super(ClientBuyResponse, self).__init__(self.serialize())
 
 class ClientLogRequest(Message):

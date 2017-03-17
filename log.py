@@ -32,6 +32,8 @@ class Log:
 				print("Index: " + str(e.index) + " term: " + str(e.term) + " command: " + e.command.toString() + " committed: False")
 		print("------------------------------")
 		print("Remaining tickets: " + str(self.getTickets()))
+		print("Old kiosks: " + str(self.config.old_kiosks))
+		print("New kiosks: " + str(self.config.new_kiosks))
 		
 	def clearFollowerIndices(self):
 		self.followerIndices = {}
@@ -115,6 +117,8 @@ class Log:
 			#print("Unexpected command")
 	def setCommit(self, c, leader=False, currentTerm=None):
 		#log_lock.acquire()
+		if self.getTerm() != currentTerm:
+			return False
 		initial = self.commitIndex
 		final = c
 		val = False

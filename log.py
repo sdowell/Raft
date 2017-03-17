@@ -3,7 +3,7 @@ import config
 import threading
 
 
-#log_lock = threading.Lock()
+#log_lock = threading.RLock()
 class LogEntry:
 
 	def __init__(self, term, index, command, commit=False):
@@ -63,9 +63,11 @@ class Log:
 		return self.num_tickets
 	# delete all entries after index
 	def deleteEntries(self, index):
+		#log_lock.acquire()
 		if index < 0:
 			index = 0
 		del self.entries[index:]
+		#log_lock.acquire()
 		
 	def appendEntry(self, entry):
 		#log_lock.acquire()
@@ -95,6 +97,7 @@ class Log:
 				print("My length: " + str(len(self.entries)) + " index=" + str(index))
 				return -1
 	def incrCommit(self, leader=False, currentTerm=None):
+		#self.commitIndex = self.commitIndex + 1
 		self.commitIndex = self.commitIndex + 1
 		entry = self.getEntry(self.commitIndex)
 		entry.committed = True
@@ -106,7 +109,7 @@ class Log:
 			else:
 				return False
 		elif type(entry.command) is config.Config and leader and entry.command.old_kiosks is not None:
-			print("Appending Cnew")
+			print("Achieved quorum for Cold+Cnew, appending Cnew")
 			Cold_new = entry.command
 			Cnew = config.Config(Cold_new.new_kiosks, Cold_new.delay, self.num_tickets)
 			Cnew_log = LogEntry(currentTerm, self.getIndex(), Cnew)
@@ -117,7 +120,7 @@ class Log:
 			#print("Unexpected command")
 	def setCommit(self, c, leader=False, currentTerm=None):
 		#log_lock.acquire()
-		if self.getTerm() != currentTerm:
+		if leader and self.getTerm() != currentTerm:
 			return False
 		initial = self.commitIndex
 		final = c
@@ -132,11 +135,13 @@ class Log:
 		return val
 	# returns index of last committed entry
 	def getCommit(self):
+		#log_lock.acquire()
 		x = 0
 		while x < len(self.entries):
 			if self.entries[x].committed == False:
 				break
 			x = x + 1
+		#log_lock.release()
 		return x - 1
 		
 	def getIndex(self):

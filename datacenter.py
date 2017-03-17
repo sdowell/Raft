@@ -13,7 +13,7 @@ STATE_FOLLOWER = 0
 STATE_CANDIDATE = 1
 STATE_LEADER = 2
 
-debug = True
+debug = False
 run_server = True
 #server priority queue
 pq = queue.PriorityQueue()
@@ -52,7 +52,12 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 	
 	def __exit__(self):
+		global myState
 		self.shutdown()
+		cancelElectionTimeout()
+		time.sleep(1)
+		cancelElectionTimeout()
+		myState = STATE_FOLLOWER
 
 def recieve_message(a_socket):
 	try:
@@ -133,12 +138,15 @@ def setCandidate():
 	global myState
 	global votedFor
 	global currentTerm
+	#if (debug):
 	print("Entering candidate mode")
 	if myState == STATE_CANDIDATE or myState == STATE_LEADER:
-		print("Attempted to enter candidate state from non-follower state")
+		if (debug):
+			print("Attempted to enter candidate state from non-follower state")
 		cancelElectionTimeout()
 		#state_lock.release()
 		return
+	currentLeader = None
 	if server_addr not in myLog.getConfig().kiosks:
 		resetElectionTimeout()
 		#state_lock.release()
@@ -158,9 +166,10 @@ def setLeader():
 	#state_lock.acquire()
 	global myState
 	if myState == STATE_CANDIDATE:
-		if(debug):
-			print("Entering leader mode")
+		#if(debug):
+		print("Entering leader mode")
 		myState = STATE_LEADER
+		currentLeader = server_addr
 	else:
 		return False
 		print("reached leader state from unexpected state")
@@ -171,6 +180,7 @@ def setLeader():
 		if currentConfig.kiosks[x] != server_addr:
 			t = threading.Thread(target=sendHeartbeat, args = (myLog.getConfig().kiosks[x],))
 			t.start()
+	#if(debug):
 	print("Spawned heartbeat threads")
 	#state_lock.release()
 	return True
@@ -183,9 +193,6 @@ def sendHeartbeat(kiosk):
 	global currentTerm
 	while(myState == STATE_LEADER):
 		#append_lock[kiosk].acquire()
-		if server_addr not in myLog.getConfig().kiosks:
-			setFollower()
-			return
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		try:
 			done = False
@@ -226,6 +233,9 @@ def sendHeartbeat(kiosk):
 		except ConnectionError:
 			pass
 		#append_lock[kiosk].release()
+		if server_addr not in myLog.getConfig().kiosks:
+			#setFollower()
+			return
 		myLog.checkFollowerIndices(server_addr, True, currentTerm)
 		time.sleep(0.5)
 	
@@ -383,7 +393,8 @@ def broadcastAppend(event, myConfig):
 			prevTerm = myLog.getTerm(prevIndex)
 			entry = myLog.getEntry(index)
 			send_message(writer, message.AppendEntries(currentTerm, my_id, prevIndex, prevTerm, entry, myLog.getCommit(), server_addr))
-			print("AppendEntries: term=" + str(currentTerm) + " my_id=" + str(my_id) + " prevIndex=" + str(prevIndex) + " prevTerm=" + str(prevTerm) + " entry=" + str(type(entry.command)) + " commit=" + str(myLog.getCommit()))
+			if (debug):
+				print("AppendEntries: term=" + str(currentTerm) + " my_id=" + str(my_id) + " prevIndex=" + str(prevIndex) + " prevTerm=" + str(prevTerm) + " entry=" + str(type(entry.command)) + " commit=" + str(myLog.getCommit()))
 			writers.remove(writer)
 
 		for reader in preaders:
@@ -418,10 +429,12 @@ def handle_message(our_message, our_socket):
 		
 	if type(our_message) is message.ClientBuyRequest:
 		#append_lock.acquire()
-		print("Handling Buy Request")
+		if(debug):
+			print("Handling Buy Request")
 		if myState != STATE_LEADER:
 			#append_lock.release()
-			print("I am not the current leader")
+			if(debug):
+				print("I am not the current leader")
 			return message.ClientBuyResponse(tickets, False, currentLeader)
 			
 		t = myLog.getTickets()
@@ -492,13 +505,15 @@ def handle_message(our_message, our_socket):
 		# phase 1
 		config_message = our_message
 		cfg_new = config_message.new_config
-		cfg_old_new = config.Config(cfg_new.kiosks, cfg_new.delay, cfg.tickets, cfg.kiosks)
+		cfg_old_new = config.Config(cfg_new.kiosks, cfg_new.delay, myLog.getConfig().tickets, myLog.getConfig().kiosks)
 		
-		success = broadcastAppend(cfg_old_new, cfg_old_new)
-		if not success:
-			print("Unsuccessful old/new config broadcast")
-		
+		#success = broadcastAppend(cfg_old_new, cfg_old_new)
+		#if not success and debug:
+		#	print("Unsuccessful old/new config broadcast")
+		newLogEntry = log.LogEntry(currentTerm, myLog.getIndex(), cfg_old_new)
+		myLog.appendEntry(newLogEntry)
 		new_followers = [x for x in cfg_old_new.new_kiosks if x not in cfg_old_new.old_kiosks]
+		print("New followers: " + str(new_followers))
 		for f in new_followers:
 			if f is not server_addr:
 				t = threading.Thread(target=sendHeartbeat, args = (f,))
@@ -609,69 +624,6 @@ def handle_message(our_message, our_socket):
 		# compare entry with local log
 	print("Warning: unhandled message")
 	return
-	if type(our_message) is message.RequestMessage:
-		our_request_message = our_message
-		sync_lclock(our_message.lamport_clock)
-		pq.put((our_request_message.rank, our_request_message))
-		send_message(our_socket, message.ReplyMessage())
-		release_message = recieve_message(our_socket)
-		assert type(release_message) is message.ReleaseMessage
-		update_tickets(release_message.num_tickets)
-		with pq_lock:
-			pq.get()
-		return None
-	elif type(our_message) is message.BuyMessage:
-		our_buy_message = our_message
-		our_sockets = [None]*message.TOTAL_KIOSKS
-		readers, writers, errors = [],[],[]
-		release_writers = []
-		with lclock_lock:
-			sync_lclock()
-			pq.put((message.get_rank( lclock, get_kiosk_number()),our_buy_message))
-			for x in range(0, message.TOTAL_KIOSKS):
-				if x is not get_kiosk_number():
-					our_sockets[x] = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-					our_sockets[x].connect(cfg.kiosks[x])
-					our_sockets[x].setblocking(0)
-					writers.append(our_sockets[x])
-					readers.append(our_sockets[x])
-					release_writers.append(our_sockets[x])
-			while len(writers) != 0:
-				_ , pwriters , _ = select.select(readers, writers, errors)
-				for writer in pwriters:
-					send_message(writer, message.RequestMessage(lclock,get_kiosk_number()))
-					writers.remove(writer)
-		while len(readers) != 0:
-			preaders, _ , _ = select.select(readers, writers, errors)
-			for reader in preaders:
-				message_in = recieve_message(reader)
-				assert type(message_in) is message.ReplyMessage
-				readers.remove(reader)
-		recvd = False
-		while recvd == False:
-			with pq_lock:
-				our_tuple = pq.get()
-				#print("Pulled rank %f off the queue" % our_tuple[0])
-				if our_tuple[1] == our_buy_message:
-					recvd = True
-					success = None
-					with ticket_lock:
-						if our_buy_message.num_tickets <= tickets:
-							success = True
-							update_tickets(tickets - our_buy_message.num_tickets)
-						else:
-							success = False
-						while len(release_writers) != 0:
-							_, pwriters, _ = select.select([],release_writers, [])
-							for writer in pwriters:
-								send_message(writer, message.ReleaseMessage(tickets))
-								release_writers.remove(writer)
-					return message.BuyMessageResponse(success)
-				else:
-					pq.put(our_tuple)
-			time.sleep(float(delay)/2)
-	else:
-		pass
 
 
 def main():
@@ -680,6 +632,7 @@ def main():
 	global my_id
 	global myLog
 	global append_lock
+	global run_server
 	my_id = get_kiosk_number()
 	follower_timer = threading.Timer(1,setCandidate)
 	config_file = sys.argv[2]
@@ -702,9 +655,14 @@ def main():
 	server_thread.start()
 	setFollower()
 	while run_server:
-		time.sleep(10)
-		#exit()
-		pass
+		try:
+			time.sleep(0.1)
+			#exit()
+			pass
+		except KeyboardInterrupt:
+			print("Caught keyboard interrupt, shutting down")
+			server.__exit__()
+			run_server = False
 
 if __name__ == "__main__":
 	main()

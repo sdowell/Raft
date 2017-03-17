@@ -42,9 +42,9 @@ class Config:
 
 	def toString(self):
 		if self.old_kiosks is None:
-			return "Cnew"
+			return "Cnew: " + str(self.new_kiosks)
 		else:
-			return "Cold+Cnew"
+			return "Cold+Cnew: " + str(self.old_kiosks) + " -> " + str(self.new_kiosks)
 		
 	# param voters: list of address tuples for voters
 	def hasQuorum(self, voters):

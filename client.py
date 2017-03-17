@@ -36,11 +36,11 @@ def buyTickets(cfg, myKiosk):
 	if response.leader is not None:
 		print("Kiosk " + str(cfg.kiosks[myKiosk]) + " is not the current leader. The current leader is " + str(response.leader))
 	elif response.success == True and response.quorum == True:
-		print("Tickets purchased successfully")
+		print("Tickets purchased successfully (" + str(buytickets) + " tickets)")
 	elif response.success == True and response.quorum == False:
 		print("Tickets not yet purchased: leader could not get quorum")
 	elif response.success == False:
-		print("Tickets not purchased: not enough tickets to complete sale")
+		print("Tickets not purchased")
 	else:
 		print("Error: unrecognized response")
 
